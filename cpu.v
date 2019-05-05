@@ -23,6 +23,7 @@
 `include "alu_control.v"
 `include "dm.v"
 `include "branch_unit.v"
+`include "branch_table.v"
 
 `ifndef DEBUG_CPU_STAGES
 `define DEBUG_CPU_STAGES 1
@@ -129,17 +130,17 @@ memread_s4,		/* mem_memread */
 	reg #(.N(2)) regr_HP(.clk(clk), .hold(stall_s1_s2), .clear(flush_s1), .in({H,P}), .out({Hd,Pd}));
 
 
-	wire Wrt, Wrp;
-	wire b;
+	//wire Wrt, Wrp;
+	//wire b;
 
 	assign b = branch_eq;
 
-	always @(*) begin 
-		if((b == 1'b0) && (H == 1'b0)) begin
-		mux_PC <= 2'd0;
-		Wrt <= 1'd0;
-		end else if ((b == 1'b0) &&)
-	end
+	//always @(*) begin 
+		//if((b == 1'b0) && (H == 1'b0)) begin
+		//mux_PC <= 2'd0;
+		//Wrt <= 1'd0;
+		//end else if ((b == 1'b0) &&)
+	//end
 	// instruction memory
 	wire [31:0] inst;
 	wire [31:0] inst_s2;
