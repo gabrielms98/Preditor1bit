@@ -9,7 +9,7 @@
  *
  * wire data_s2;
  * wire data_s3;
- *	
+ *
  * If the stage number is omitted it is assumed to
  * be at the stage at which the variable is first
  * established.
@@ -33,7 +33,7 @@ module cpu(
 		input wire clk);
 
 	parameter NMEM = 20;  // number in instruction memory
-	parameter IM_DATA = "examples_binary/ex_M1_plus_M2_to_M3.txt";
+	parameter IM_DATA = "examples_binary/loop.txt";
 
 	wire regwrite_s5;
 	wire [4:0] wrreg_s5;
@@ -44,55 +44,75 @@ module cpu(
 	initial begin
 		if (`DEBUG_CPU_STAGES) begin
 			$display("if_pc,    if_instr, id_regrs, id_regrt, ex_alua,  ex_alub,  ex_aluctl, mem_memdata, mem_memread, mem_memwrite, wb_regdata, wb_regwrite");
-			$monitor("PC=%x %x ||rs=%d rt=%d rd=%d||A=%x B=%x||w=%x Ram=%x R%xW%x||D=%x \nb=%x j=%x||Opcode=%x Func=%x||I=%x R=%x||D=%d alu=%x branch%x j%x||R=%x C=%d \n-------------------------------------------------------------------------------------------------------",
+			$monitor("C=%d Wrt=%b Wrp=%b MUX=%d PC=%x %x ||rs=%d rt=%d rd=%d||A=%x B=%x||w=%x Ram=%x R%xW%x||D=%x \nb=%x j=%x||Opcode=%x Func=%x||I=%x R=%x||D=%d alu=%x branch%x j%x||R=%x C=%d \n-------------------------------------------------------------------------------------------------------",
+					c,
+					Wrt,
+					Wrp,
+					mux,
 					pc,				/* if_pc */
 					inst,			/* if_instr */
-					rs,rt,rd,	
+					rs,rt,rd,
 					fw_data1_s3,		/* A */
 					alusrc_data2,	/* B */
 					data2_s4,		/* mem_memdata */
 					rdata,
 memread_s4,		/* mem_memread */
-					memwrite_s4,	
+					memwrite_s4,
 					wrdata_s5,		/* wb_wrreg */
 					baddr_s4,jaddr_s4,
 			                opcode, inst_s2[5:0],
 					seimm_s3,alurslt,
 					 wrreg_s4,alurslt_s4,	/* mem_memwrite */
-					pcsrc,jump_s4,		
+					pcsrc,jump_s4,
 
 					wrreg_s5,		/* wb_regdata */
-					clock_counter
+					clock_counter,
 				);
 		end
-	end 
+	end
 
 
-	branch_unit m_branch_unit(.branch_eq(branch_eq), .equal(c), .Hp(H), .Hpd(Hd), .flush(flush_s1),
-	.muxpc(mux_PC), .Wrt(Wrt), .Wrp(Wrp));
+	wire Wrt;
+	wire Wrp;
+	wire flush_s1_f;
+	wire c;
+	wire B;
+	assign B = branch_eq_s2;
+
+	assign c = (data1==data2);
+	branch_unit m_branch_unit(.Wrt_f(Wrt), .Wrp_f(Wrp), .H(H), .P(P), .Hd(Hd), .Pd(Pd), .b(B), .c(c), .flush_s1(flush_s1_f), .mux_f(mux));
+
+	wire Pin;
+	assign Pin = c | Pd;
+
 
 	branch_table m_branch_table(.clk(clk), .pc4(pc4), .wrt(Wrt), .wrp(Wrp),
-	.BdestIN(mux_PC), .Bdest(mux_PC), .Pin(P), .P(Pd), .H(H), .PC4d(pc4_s2));
+	.BdestIN(baddr_s2), .Bdest(Bdest), .Pin(Pin), .P(P), .H(H), .PC4d(pc4_s2));
 	//
 	// }}}
 
 	// {{{ flush control
 	reg flush_s1, flush_s2, flush_s3;
 	always @(*) begin
-		flush_s1 <= 1'b0;
+		flush_s1 <= flush_s1_f;
 		flush_s2 <= 1'b0;
 		flush_s3 <= 1'b0;
+
+
+/*
 		if (pcsrc | jump_s4) begin
 			flush_s1 <= 1'b1;
 			flush_s2 <= 1'b1;
 			flush_s3 <= 1'b1;
 		end
+*/
 	end
+
 	// }}}
 
 	// {{{ stage 1, IF (fetch)
 
-	reg  [5:0] clock_counter;
+	reg  [5:0]clock_counter;
 	initial begin
 		clock_counter <= 6'd1;
 	end
@@ -107,15 +127,22 @@ memread_s4,		/* mem_memread */
 
 	wire [31:0] pc4;  // PC + 4
 	assign pc4 = pc + 4;
+	wire [31:0] Bdest;
+	wire [31:0] BdestIN;
+	wire [1:0] mux;
 
 	//MUDANDO MUX PARA RECEBER QUATRO ENTRADAS
 	always @(posedge clk) begin
-		if (stall_s1_s2) 
+		if (stall_s1_s2)
 			pc <= pc;
-		else if (pcsrc == 1'b1)
-			pc <= baddr_s4;
-		else if (jump_s4 == 1'b1)
-			pc <= jaddr_s4;
+		else if (mux == 2'd0)
+			pc <= pc+4;
+		else if (mux == 2'd1)
+			pc <= Bdest;
+		else if (mux == 2'd2)
+			pc <= pc4_s2;
+		else if (mux == 2'd3)
+			pc <= baddr_s2;
 		else
 			pc <= pc4;
 	end
@@ -127,15 +154,17 @@ memread_s4,		/* mem_memread */
 						.in(pc4), .out(pc4_s2));
 
 	wire H, P, Hd, Pd;
-	reg #(.N(2)) regr_HP(.clk(clk), .hold(stall_s1_s2), .clear(flush_s1), .in({H,P}), .out({Hd,Pd}));
+	regr #(.N(2)) regr_HP(.clk(clk),
+						.hold(stall_s1_s2), .clear(flush_s1),
+						.in({H,P}), .out({Hd,Pd}));
+
 
 
 	//wire Wrt, Wrp;
 	//wire b;
 
-	assign b = branch_eq;
 
-	//always @(*) begin 
+	//always @(*) begin
 		//if((b == 1'b0) && (H == 1'b0)) begin
 		//mux_PC <= 2'd0;
 		//Wrt <= 1'd0;
@@ -387,13 +416,13 @@ memread_s4,		/* mem_memread */
 	reg pcsrc;
 	always @(*) begin
 		case (1'b1)
-			branch_eq_s4: pcsrc <= zero_s4;
-			branch_ne_s4: pcsrc <= ~(zero_s4);
+			//branch_eq_s4: pcsrc <= zero_s4;
+			//branch_ne_s4: pcsrc <= ~(zero_s4);
 			default: pcsrc <= 1'b0;
 		endcase
 	end
 	// }}}
-			
+
 	// {{{ stage 5, WB (write back)
 
 	assign wrdata_s5 = (memtoreg_s5 == 1'b1) ? rdata_s5 : alurslt_s5;
@@ -433,7 +462,7 @@ memread_s4,		/* mem_memread */
 
 	/* If an operation in stage 4 (MEM) loads from memory (e.g. lw)
 	 * and the operation in stage 3 (EX) depends on this value,
-	 * a stall must be performed.  The memory read cannot 
+	 * a stall must be performed.  The memory read cannot
 	 * be forwarded because memory access is too slow.  It can
 	 * be forwarded from stage 5 (WB) after a stall.
 	 *

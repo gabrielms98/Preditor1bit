@@ -1,3 +1,6 @@
+`ifndef BRANCH_TABLE
+`define BRANCH_TABLE
+
 module branch_table(
   input wire clk,
   input wire[31:0] pc4,
@@ -11,26 +14,29 @@ module branch_table(
   input wire [31:0] PC4d
 );
 
-reg wire P;
-reg wire [31:0] Bdest;
 parameter BM_DATA = "dm_data.txt";
+parameter PRED_DATA = "PRED_DATA.txt";
 reg[25:0] tag [0:15];
 reg pred[0:15];
 reg [31:0] dest[0:15];
 
 initial begin
   $readmemh(BM_DATA, tag, 0, 15);
+  $readmemh(PRED_DATA,pred,0,15);
+
   end
-  always @(posedge clk) begin
+  always @(*) begin
     if(wrt) begin
-      tag[pc4d[5:2]] <= pc4d[31:6];
-      dest[pc4d[5:2]] <= BdestIN;
+      tag[PC4d[5:2]] = PC4d[31:6];
+      dest[PC4d[5:2]] = BdestIN;
     end
     if(wrp) begin
-      pred[pc4d[5:2]] <= Pin;
+      pred[PC4d[5:2]] = Pin;
     end
   end
-  assign Bdest = dest[pc4[5:2]][31:0];
+  assign Bdest = (wrt) ? BdestIN : dest[pc4[5:2]][31:0];
   assign H = (tag[pc4[5:2]] == pc4[31:6]);
-  assign P = pred[pc4[5:2]];
+  assign P = (wrp) ? Pin : pred[pc4[5:2]];
 endmodule
+
+`endif
